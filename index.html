@@ -681,6 +681,8 @@
       const px = player.x + player.w / 2, py = player.y + player.h / 2;
       let best = null, bestDist = GRAPPLE_RANGE;
       for (const a of anchors) {
+        // Only target anchors visible on screen
+        if (a[0] < cameraX - 50 || a[0] > cameraX + canvas.width + 50) continue;
         const d = dist(px, py, a[0], a[1]);
         if (d < bestDist) { bestDist = d; best = { x: a[0], y: a[1] }; }
       }
