@@ -594,7 +594,11 @@
 
       if (!grappleHeld && (grapple.active || grapple.firing)) {
         if (grapple.active) {
-          player.vx *= 1.1; player.vy *= 1.1;
+          // Strong release boost — preserves swing direction
+          player.vx *= 1.35;
+          player.vy *= 1.2;
+          // Cap extreme upward launches but keep horizontal
+          if (player.vy < -12) player.vy = -12;
           spawnParticles(player.x + player.w / 2, player.y + player.h / 2, '#ff6b6b', 6);
           playSfx('release');
         }
@@ -625,8 +629,8 @@
           if (grapple.ropeLen < 50) grapple.ropeLen = 50;
         }
         grapple.angularVel += (0.34 * Math.cos(grapple.angle)) / grapple.ropeLen;
-        grapple.angularVel *= 0.996;
-        if (Math.abs(grapple.angularVel) > 0.09) grapple.angularVel *= 0.97;
+        grapple.angularVel *= 0.997;
+        if (Math.abs(grapple.angularVel) > 0.13) grapple.angularVel *= 0.98;
         const swingInput = 0.007;
         if (keys['ArrowLeft'] || keys['KeyA']) { grapple.angularVel += swingInput; player.facing = -1; }
         if (keys['ArrowRight'] || keys['KeyD']) { grapple.angularVel -= swingInput; player.facing = 1; }
@@ -637,7 +641,6 @@
         player.y = grapple.hookedPoint.y + Math.sin(grapple.angle) * grapple.ropeLen - player.h / 2;
         player.vx = -Math.sin(grapple.angle) * grapple.angularVel * grapple.ropeLen;
         player.vy = Math.cos(grapple.angle) * grapple.angularVel * grapple.ropeLen;
-        if (player.vy < -8) player.vy *= 0.92;
         if (Math.abs(grapple.angularVel) > 0.02)
           spawnParticles(player.x + player.w / 2, player.y + player.h, 'rgba(255,107,107,0.5)', 1);
         player.grounded = false;
