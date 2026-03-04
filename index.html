@@ -764,10 +764,10 @@
           if (grapple.retractSpeed < 0.5) grapple.retractSpeed = 0;
           if (grapple.ropeLen < 50) grapple.ropeLen = 50;
         }
-        grapple.angularVel += (0.65 * Math.cos(grapple.angle)) / grapple.ropeLen;
-        grapple.angularVel *= 0.999;
-        if (Math.abs(grapple.angularVel) > 0.18) grapple.angularVel *= 0.995;
-        const swingInput = 0.012;
+        grapple.angularVel += (0.45 * Math.cos(grapple.angle)) / grapple.ropeLen;
+        grapple.angularVel *= 0.996;
+        if (Math.abs(grapple.angularVel) > 0.14) grapple.angularVel *= 0.98;
+        const swingInput = 0.008;
         if (keys['ArrowLeft'] || keys['KeyA']) { grapple.angularVel += swingInput; player.facing = -1; }
         if (keys['ArrowRight'] || keys['KeyD']) { grapple.angularVel -= swingInput; player.facing = 1; }
         if (keys['ArrowUp'] || keys['KeyW']) grapple.ropeLen = Math.max(35, grapple.ropeLen - 3);
