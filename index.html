@@ -330,25 +330,35 @@
       const allPlats = getAllPlatforms();
 
       // === GRAPPLE HOOK ===
-      // Fire grapple
-      if (keysPressed['KeyE'] || keysPressed['ShiftLeft'] || keysPressed['ShiftRight']) {
-        if (!grapple.active && !grapple.firing) {
-          const target = findNearestAnchor();
-          if (target) {
-            grapple.firing = true;
-            grapple.fireX = player.x + player.w / 2;
-            grapple.fireY = player.y + player.h / 2;
-            const angle = Math.atan2(target.y - grapple.fireY, target.x - grapple.fireX);
-            grapple.fireDx = Math.cos(angle) * GRAPPLE_FIRE_SPEED;
-            grapple.fireDy = Math.sin(angle) * GRAPPLE_FIRE_SPEED;
-            grapple.hookedPoint = target;
-            grapple.fireTimer = 0;
-          }
-        } else if (grapple.active) {
-          // Release grapple
-          grapple.active = false;
-          grapple.hookedPoint = null;
+      const grappleHeld = keys['KeyE'] || keys['ShiftLeft'] || keys['ShiftRight'];
+      const grappleJustPressed = keysPressed['KeyE'] || keysPressed['ShiftLeft'] || keysPressed['ShiftRight'];
+
+      // Fire grapple on press
+      if (grappleJustPressed && !grapple.active && !grapple.firing) {
+        const target = findNearestAnchor();
+        if (target) {
+          grapple.firing = true;
+          grapple.fireX = player.x + player.w / 2;
+          grapple.fireY = player.y + player.h / 2;
+          const angle = Math.atan2(target.y - grapple.fireY, target.x - grapple.fireX);
+          grapple.fireDx = Math.cos(angle) * GRAPPLE_FIRE_SPEED;
+          grapple.fireDy = Math.sin(angle) * GRAPPLE_FIRE_SPEED;
+          grapple.hookedPoint = target;
+          grapple.fireTimer = 0;
         }
+      }
+
+      // Release grapple when button released
+      if (!grappleHeld && (grapple.active || grapple.firing)) {
+        if (grapple.active) {
+          // Launch with current momentum + small boost
+          player.vx *= 1.1;
+          player.vy *= 1.1;
+          spawnParticles(player.x + player.w / 2, player.y + player.h / 2, '#ff6b6b', 6);
+        }
+        grapple.active = false;
+        grapple.firing = false;
+        grapple.hookedPoint = null;
       }
 
       // Grapple firing animation
@@ -358,23 +368,19 @@
         grapple.fireTimer++;
         const d = dist(grapple.fireX, grapple.fireY, grapple.hookedPoint.x, grapple.hookedPoint.y);
         if (d < 20) {
-          // Hook connected
           grapple.firing = false;
           grapple.active = true;
           const px = player.x + player.w / 2;
           const py = player.y + player.h / 2;
           grapple.ropeLen = dist(px, py, grapple.hookedPoint.x, grapple.hookedPoint.y);
           grapple.angle = Math.atan2(py - grapple.hookedPoint.y, px - grapple.hookedPoint.x);
-          // Convert current velocity to angular velocity (preserve momentum)
           const tangentX = -Math.sin(grapple.angle);
           const tangentY = Math.cos(grapple.angle);
           grapple.angularVel = (player.vx * tangentX + player.vy * tangentY) / grapple.ropeLen;
-          // Add a minimum swing if player had downward velocity (feels like catching)
-          if (Math.abs(grapple.angularVel) < 0.015 && player.vy > 2) {
-            grapple.angularVel = player.facing * 0.02;
+          if (Math.abs(grapple.angularVel) < 0.012 && player.vy > 2) {
+            grapple.angularVel = player.facing * 0.015;
           }
-          // Auto-retract: pull player toward anchor smoothly
-          grapple.retractSpeed = grapple.ropeLen > 120 ? 4 : 0;
+          grapple.retractSpeed = grapple.ropeLen > 120 ? 3 : 0;
           spawnParticles(grapple.hookedPoint.x, grapple.hookedPoint.y, '#ff6b6b', 5);
         }
         if (grapple.fireTimer > 30) {
@@ -385,35 +391,40 @@
 
       // Grapple swing physics
       if (grapple.active && grapple.hookedPoint) {
-        // Auto-retract rope on initial hook (pulls you in smoothly)
+        // Auto-retract on hook
         if (grapple.retractSpeed > 0) {
           grapple.ropeLen -= grapple.retractSpeed;
-          grapple.retractSpeed *= 0.92; // ease out
+          grapple.retractSpeed *= 0.92;
           if (grapple.retractSpeed < 0.5) grapple.retractSpeed = 0;
           if (grapple.ropeLen < 50) grapple.ropeLen = 50;
         }
 
-        // Pendulum gravity — scale with rope length for consistent feel
-        const pendulumGravity = 0.4;
+        // Pendulum gravity — gentler to keep arcs more horizontal
+        const pendulumGravity = 0.28;
         grapple.angularVel += (pendulumGravity * Math.cos(grapple.angle)) / grapple.ropeLen;
 
-        // Very low damping — let momentum carry
-        grapple.angularVel *= 0.998;
+        // Moderate damping — momentum carries but doesn't spiral
+        grapple.angularVel *= 0.993;
 
-        // Strong player input — pump the swing
-        const swingInput = 0.008;
+        // Cap angular velocity to prevent going too fast / launching to sky
+        const maxAngVel = 0.06;
+        if (grapple.angularVel > maxAngVel) grapple.angularVel = maxAngVel;
+        if (grapple.angularVel < -maxAngVel) grapple.angularVel = -maxAngVel;
+
+        // Player input — FLIPPED directions (left key = swing right, feels like pushing)
+        const swingInput = 0.006;
         if (keys['ArrowLeft'] || keys['KeyA']) {
-          grapple.angularVel -= swingInput;
+          grapple.angularVel += swingInput;
           player.facing = -1;
         }
         if (keys['ArrowRight'] || keys['KeyD']) {
-          grapple.angularVel += swingInput;
+          grapple.angularVel -= swingInput;
           player.facing = 1;
         }
 
-        // Climb rope (fast and responsive)
+        // Climb rope
         if (keys['ArrowUp'] || keys['KeyW']) {
-          grapple.ropeLen = Math.max(35, grapple.ropeLen - 3.5);
+          grapple.ropeLen = Math.max(35, grapple.ropeLen - 3);
         }
         if (keys['ArrowDown'] || keys['KeyS']) {
           grapple.ropeLen = Math.min(GRAPPLE_RANGE, grapple.ropeLen + 3);
@@ -421,47 +432,25 @@
 
         grapple.angle += grapple.angularVel;
 
-        // Update player position from pendulum
+        // Update player position
         player.x = grapple.hookedPoint.x + Math.cos(grapple.angle) * grapple.ropeLen - player.w / 2;
         player.y = grapple.hookedPoint.y + Math.sin(grapple.angle) * grapple.ropeLen - player.h / 2;
 
-        // Convert angular velocity to linear velocity (full momentum preserved)
+        // Convert to linear velocity — favor horizontal over vertical
         player.vx = -Math.sin(grapple.angle) * grapple.angularVel * grapple.ropeLen;
         player.vy = Math.cos(grapple.angle) * grapple.angularVel * grapple.ropeLen;
+        // Dampen upward velocity to keep launches more horizontal
+        if (player.vy < -5) player.vy *= 0.85;
 
         // Swing trail particles
         if (Math.abs(grapple.angularVel) > 0.02) {
           spawnParticles(player.x + player.w / 2, player.y + player.h, 'rgba(255,107,107,0.5)', 1);
         }
 
-        // Release with E/Shift — preserves full momentum
-        if (keysPressed['KeyE'] || keysPressed['ShiftLeft'] || keysPressed['ShiftRight']) {
-          const releaseBoost = 1.15; // slight launch boost
-          player.vx *= releaseBoost;
-          player.vy *= releaseBoost;
-          grapple.active = false;
-          grapple.hookedPoint = null;
-          spawnParticles(player.x + player.w / 2, player.y + player.h / 2, '#ff6b6b', 6);
-        }
-
-        // Jump release — full momentum + upward kick
-        if (keysPressed['Space']) {
-          const speed = Math.sqrt(player.vx ** 2 + player.vy ** 2);
-          const launchBoost = 1.25;
-          player.vx *= launchBoost;
-          player.vy *= launchBoost;
-          // Add upward kick (stronger when moving fast)
-          player.vy = Math.min(player.vy, -Math.max(6, speed * 0.5));
-          grapple.active = false;
-          grapple.hookedPoint = null;
-          spawnParticles(player.x + player.w / 2, player.y + player.h / 2, '#ff6b6b', 8);
-        }
-
         // Platform collision while swinging
         player.grounded = false;
         for (const plat of allPlats) {
           if (rectCollision(player, plat)) {
-            // Only detach if landing on top
             if (player.vy > 0 && player.y + player.h - plat.y < 15) {
               player.y = plat.y - player.h;
               player.vy = 0;
@@ -469,7 +458,6 @@
               grapple.active = false;
               grapple.hookedPoint = null;
             } else if (player.vy < 0 && player.y < plat.y + plat.h) {
-              // Bonk head — don't detach, just stop upward
               player.y = plat.y + plat.h;
               player.vy = 0;
               grapple.angularVel *= 0.5;
@@ -861,12 +849,12 @@
         if (nearAnchor && !grapple.active) {
           ctx.fillStyle = 'rgba(255,107,107,0.7)';
           ctx.font = '13px monospace';
-          ctx.fillText('[E/Shift] Grapple', 20, 60);
+          ctx.fillText('[Hold E/Shift] Grapple', 20, 60);
         }
         if (grapple.active) {
           ctx.fillStyle = '#ff6b6b';
           ctx.font = '13px monospace';
-          ctx.fillText('GRAPPLED - Space to release', 20, 60);
+          ctx.fillText('SWINGING - Release to launch', 20, 60);
         }
       }
 
@@ -931,7 +919,7 @@
       } else {
         ctx.fillStyle = 'rgba(255,255,255,0.3)';
         ctx.font = '12px monospace';
-        ctx.fillText('WASD/Arrows: move | Space: jump | E/Shift: grapple', 20, canvas.height - 15);
+        ctx.fillText('WASD/Arrows: move | Space: jump | Hold E/Shift: grapple', 20, canvas.height - 15);
       }
     }
 
