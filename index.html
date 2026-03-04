@@ -730,9 +730,9 @@
       if (!grappleHeld && (grapple.active || grapple.firing)) {
         if (grapple.active) {
           // Launch with swing momentum — smooth arc, no vertical jerk
-          player.vx *= 1.5;
+          player.vx *= 1.2;
           // Don't amplify upward vy — just keep it natural for a smooth arc
-          if (player.vy < -16) player.vy = -16;
+          if (player.vy < -10) player.vy = -10;
           // Set momentum timer so air physics preserves this velocity
           grapple.momentum = 90;
           spawnParticles(player.x + player.w / 2, player.y + player.h / 2, '#ff6b6b', 6);
@@ -764,10 +764,10 @@
           if (grapple.retractSpeed < 0.5) grapple.retractSpeed = 0;
           if (grapple.ropeLen < 50) grapple.ropeLen = 50;
         }
-        grapple.angularVel += (0.45 * Math.cos(grapple.angle)) / grapple.ropeLen;
-        grapple.angularVel *= 0.996;
-        if (Math.abs(grapple.angularVel) > 0.14) grapple.angularVel *= 0.98;
-        const swingInput = 0.008;
+        grapple.angularVel += (0.35 * Math.cos(grapple.angle)) / grapple.ropeLen;
+        grapple.angularVel *= 0.993;
+        if (Math.abs(grapple.angularVel) > 0.10) grapple.angularVel *= 0.97;
+        const swingInput = 0.006;
         if (keys['ArrowLeft'] || keys['KeyA']) { grapple.angularVel += swingInput; player.facing = -1; }
         if (keys['ArrowRight'] || keys['KeyD']) { grapple.angularVel -= swingInput; player.facing = 1; }
         if (keys['ArrowUp'] || keys['KeyW']) grapple.ropeLen = Math.max(35, grapple.ropeLen - 3);
