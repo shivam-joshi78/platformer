@@ -481,15 +481,22 @@
     usernameInput.addEventListener('keyup', e => e.stopPropagation());
 
     // Leaderboard (localStorage)
+    // One-time leaderboard reset for v1.8
+    if (!localStorage.getItem('plat_lb_v2')) {
+      localStorage.removeItem('plat_leaderboard');
+      localStorage.setItem('plat_lb_v2', '1');
+    }
     function getLeaderboard() {
       try { return JSON.parse(localStorage.getItem('plat_leaderboard') || '[]'); }
       catch { return []; }
     }
     function saveToLeaderboard(name, time, coinCount) {
-      const lb = getLeaderboard();
+      let lb = getLeaderboard();
+      // Remove any existing entry for this user (keep only latest)
+      lb = lb.filter(e => e.name !== name);
       lb.push({ name, time, coins: coinCount, date: Date.now() });
       lb.sort((a, b) => a.time - b.time);
-      if (lb.length > 10) lb.length = 10; // keep top 10
+      if (lb.length > 10) lb.length = 10;
       localStorage.setItem('plat_leaderboard', JSON.stringify(lb));
       renderLeaderboard();
     }
