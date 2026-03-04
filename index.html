@@ -34,6 +34,13 @@
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
 
+    // Background image
+    const bgImage = new Image();
+    bgImage.crossOrigin = 'anonymous';
+    bgImage.src = 'https://t4.ftcdn.net/jpg/07/11/00/77/360_F_711007799_GBTIazkGvwu2ea1WSMSbYpOqCvawVK1p.jpg';
+    let bgLoaded = false;
+    bgImage.onload = () => { bgLoaded = true; };
+
     // Game state
     let gameState = 'playing'; // playing, won, dead
     let cameraX = 0;
@@ -255,34 +262,19 @@
     }
 
     function draw() {
-      // Sky gradient
-      const skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-      skyGrad.addColorStop(0, '#0f3460');
-      skyGrad.addColorStop(1, '#16213e');
-      ctx.fillStyle = skyGrad;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      // Background stars
-      ctx.fillStyle = 'rgba(255,255,255,0.3)';
-      for (let i = 0; i < 50; i++) {
-        const sx = ((i * 137 + 50) % WORLD_WIDTH) - cameraX * 0.3;
-        const sy = (i * 97 + 30) % (canvas.height - 100);
-        if (sx >= -5 && sx <= canvas.width + 5) {
-          ctx.fillRect(sx, sy, 2, 2);
-        }
-      }
-
-      // Background mountains
-      ctx.fillStyle = '#1a1a3e';
-      for (let i = 0; i < WORLD_WIDTH; i += 200) {
-        const mx = i - cameraX * 0.4;
-        if (mx > -250 && mx < canvas.width + 50) {
-          ctx.beginPath();
-          ctx.moveTo(mx, 460);
-          ctx.lineTo(mx + 100, 460 - 80 - (i % 100));
-          ctx.lineTo(mx + 200, 460);
-          ctx.fill();
-        }
+      // Background image with parallax
+      if (bgLoaded) {
+        const bgScale = canvas.height / bgImage.height;
+        const bgW = bgImage.width * bgScale;
+        const parallaxX = -(cameraX * 0.3) % bgW;
+        ctx.drawImage(bgImage, parallaxX, 0, bgW, canvas.height);
+        ctx.drawImage(bgImage, parallaxX + bgW, 0, bgW, canvas.height);
+      } else {
+        const skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        skyGrad.addColorStop(0, '#0f3460');
+        skyGrad.addColorStop(1, '#16213e');
+        ctx.fillStyle = skyGrad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
 
       ctx.save();
