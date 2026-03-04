@@ -80,10 +80,59 @@
     .patch-item.fix::before { content: '~'; color: #ffd700; }
     .patch-section { margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #1a2a4a; }
     .patch-section:last-child { border-bottom: none; }
+
+    /* Username prompt */
+    #username-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.85); z-index: 20;
+      display: flex; justify-content: center; align-items: center;
+    }
+    #username-overlay.hidden { display: none; }
+    #username-box {
+      background: #16213e; border: 2px solid #e94560; border-radius: 12px;
+      padding: 36px 40px; text-align: center; color: #fff;
+      box-shadow: 0 0 60px rgba(233,69,96,0.4);
+    }
+    #username-box h1 { font-size: 32px; margin-bottom: 6px; color: #e94560; font-family: monospace; }
+    #username-box p { color: #888; font-size: 14px; margin-bottom: 24px; }
+    #username-input {
+      width: 260px; padding: 10px 16px; font-size: 18px; font-family: monospace;
+      background: #0d1b2a; border: 2px solid #2a3a5e; border-radius: 8px;
+      color: #fff; outline: none; text-align: center;
+    }
+    #username-input:focus { border-color: #e94560; }
+    #username-go {
+      display: block; margin: 18px auto 0; padding: 10px 36px; font-size: 16px;
+      background: #e94560; color: #fff; border: none; border-radius: 8px;
+      cursor: pointer; font-weight: 700; transition: background 0.2s;
+    }
+    #username-go:hover { background: #c73550; }
+
+    /* Leaderboard in settings */
+    .lb-row {
+      display: flex; justify-content: space-between; padding: 7px 0;
+      border-bottom: 1px solid #1a2a4a; font-size: 13px;
+    }
+    .lb-rank { width: 30px; color: #888; }
+    .lb-name { flex: 1; color: #ccc; }
+    .lb-time { color: #ffd700; font-family: monospace; font-weight: 700; }
+    .lb-coins { color: #4ecca3; width: 50px; text-align: right; font-size: 12px; }
+    .lb-row.me { background: rgba(233,69,96,0.15); border-radius: 4px; padding: 7px 6px; }
+    .lb-empty { color: #555; font-size: 13px; text-align: center; padding: 30px 0; }
   </style>
 </head>
 
 <body>
+  <!-- Username prompt -->
+  <div id="username-overlay">
+    <div id="username-box">
+      <h1>PLATFORMER</h1>
+      <p>Enter your name for the leaderboard</p>
+      <input type="text" id="username-input" maxlength="16" placeholder="Player" autocomplete="off">
+      <button id="username-go">PLAY</button>
+    </div>
+  </div>
+
   <canvas id="game" width="800" height="500"></canvas>
 
   <!-- Settings overlay -->
@@ -95,6 +144,7 @@
       </div>
       <div class="tabs">
         <div class="tab active" data-tab="audio">Audio</div>
+        <div class="tab" data-tab="leaderboard">Leaderboard</div>
         <div class="tab" data-tab="keybinds">Keybinds</div>
         <div class="tab" data-tab="patchnotes">Patch Notes</div>
       </div>
@@ -114,6 +164,11 @@
         <p style="color:#666; font-size:12px; margin-top:8px;">Audio uses Web Audio API — no files needed.</p>
       </div>
 
+      <!-- Leaderboard tab -->
+      <div class="tab-content" id="tab-leaderboard">
+        <div id="lb-list"><div class="lb-empty">No runs yet. Finish the level to get on the board!</div></div>
+      </div>
+
       <!-- Keybinds tab -->
       <div class="tab-content" id="tab-keybinds">
         <div class="keybind-row"><span class="keybind-action">Move Left</span><span><span class="keybind-key">A</span> / <span class="keybind-key">&larr;</span></span></div>
@@ -128,6 +183,14 @@
 
       <!-- Patch Notes tab -->
       <div class="tab-content" id="tab-patchnotes">
+        <div class="patch-section">
+          <div class="patch-version">v1.5 — Leaderboard</div>
+          <div class="patch-date">March 2026</div>
+          <div class="patch-item">Username prompt before game starts</div>
+          <div class="patch-item">Local leaderboard with top 10 times</div>
+          <div class="patch-item">Leaderboard tab in settings</div>
+          <div class="patch-item fix">Grapple release momentum improved</div>
+        </div>
         <div class="patch-section">
           <div class="patch-version">v1.4 — Audio & Settings</div>
           <div class="patch-date">March 2026</div>
@@ -312,6 +375,7 @@
     function openSettings() {
       settingsOpen = true;
       overlay.classList.add('open');
+      renderLeaderboard();
     }
     function closeSettings() {
       settingsOpen = false;
@@ -373,6 +437,65 @@
         openSettings();
       }
     });
+
+    // ========== USERNAME & LEADERBOARD ==========
+    let playerName = localStorage.getItem('plat_username') || '';
+    let gameStarted = false;
+    const usernameOverlay = document.getElementById('username-overlay');
+    const usernameInput = document.getElementById('username-input');
+    const usernameGo = document.getElementById('username-go');
+
+    // Pre-fill saved name
+    if (playerName) usernameInput.value = playerName;
+    usernameInput.focus();
+
+    function startGame() {
+      playerName = usernameInput.value.trim() || 'Player';
+      localStorage.setItem('plat_username', playerName);
+      usernameOverlay.classList.add('hidden');
+      gameStarted = true;
+      initAudio();
+      if (!musicPlaying) startMusic();
+    }
+
+    usernameGo.addEventListener('click', startGame);
+    usernameInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') startGame();
+      e.stopPropagation(); // don't trigger game keys
+    });
+    usernameInput.addEventListener('keyup', e => e.stopPropagation());
+
+    // Leaderboard (localStorage)
+    function getLeaderboard() {
+      try { return JSON.parse(localStorage.getItem('plat_leaderboard') || '[]'); }
+      catch { return []; }
+    }
+    function saveToLeaderboard(name, time, coinCount) {
+      const lb = getLeaderboard();
+      lb.push({ name, time, coins: coinCount, date: Date.now() });
+      lb.sort((a, b) => a.time - b.time);
+      if (lb.length > 10) lb.length = 10; // keep top 10
+      localStorage.setItem('plat_leaderboard', JSON.stringify(lb));
+      renderLeaderboard();
+    }
+    function renderLeaderboard() {
+      const lb = getLeaderboard();
+      const container = document.getElementById('lb-list');
+      if (lb.length === 0) {
+        container.innerHTML = '<div class="lb-empty">No runs yet. Finish the level to get on the board!</div>';
+        return;
+      }
+      container.innerHTML = lb.map((entry, i) => {
+        const isMe = entry.name === playerName;
+        const rank = i === 0 ? '&#x1F947;' : i === 1 ? '&#x1F948;' : i === 2 ? '&#x1F949;' : `${i + 1}.`;
+        return `<div class="lb-row${isMe ? ' me' : ''}">
+          <span class="lb-rank">${rank}</span>
+          <span class="lb-name">${entry.name}</span>
+          <span class="lb-coins">${entry.coins}/${totalCoins}</span>
+          <span class="lb-time">${formatTime(entry.time)}</span>
+        </div>`;
+      }).join('');
+    }
 
     // ========== GAME STATE ==========
     let gameState = 'playing';
@@ -488,12 +611,7 @@
     });
     window.addEventListener('keyup', e => keys[e.code] = false);
 
-    // First interaction starts audio
-    window.addEventListener('keydown', function firstKey() {
-      initAudio();
-      if (!musicPlaying) startMusic();
-      window.removeEventListener('keydown', firstKey);
-    });
+    // renderLeaderboard() called after formatTime is defined below
 
     const particles = [];
     function spawnParticles(x, y, color, count) {
@@ -511,6 +629,9 @@
       const centis = Math.floor((ms % 1000) / 10);
       return `${mins}:${secs.toString().padStart(2, '0')}.${centis.toString().padStart(2, '0')}`;
     }
+
+    // Now that formatTime and totalCoins are defined, render initial leaderboard
+    renderLeaderboard();
 
     function restart() {
       player.x = 50; player.y = 300; player.vx = 0; player.vy = 0;
@@ -550,7 +671,7 @@
     }
 
     function update() {
-      if (settingsOpen) return;
+      if (!gameStarted || settingsOpen) return;
       if (gameState !== 'playing') {
         if (keys['KeyR']) restart();
         for (const k in keysPressed) keysPressed[k] = false;
@@ -737,6 +858,7 @@
           bestTime = timerElapsed;
           localStorage.setItem('platformer_best2', bestTime.toString());
         }
+        saveToLeaderboard(playerName, timerElapsed, player.coins);
         spawnParticles(flag.x + flag.w / 2, flag.y, '#00ff88', 30);
         playSfx('win');
       }
@@ -970,7 +1092,7 @@
         ctx.fillStyle = '#ffd700'; ctx.font = '20px monospace';
         ctx.fillText(`Coins: ${player.coins}/${totalCoins}`, canvas.width / 2, canvas.height / 2 + 48);
         ctx.fillStyle = '#fff'; ctx.font = '18px monospace';
-        ctx.fillText('Press R to restart', canvas.width / 2, canvas.height / 2 + 80);
+        ctx.fillText('Press R to restart | ESC for leaderboard', canvas.width / 2, canvas.height / 2 + 80);
         ctx.textAlign = 'left';
       } else if (gameState === 'dead') {
         ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
