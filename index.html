@@ -722,10 +722,10 @@
       if (!grappleHeld && (grapple.active || grapple.firing)) {
         if (grapple.active) {
           // Strong release boost — preserves swing direction
-          player.vx *= 1.35;
-          player.vy *= 1.2;
+          player.vx *= 1.5;
+          player.vy *= 1.3;
           // Cap extreme upward launches but keep horizontal
-          if (player.vy < -12) player.vy = -12;
+          if (player.vy < -16) player.vy = -16;
           spawnParticles(player.x + player.w / 2, player.y + player.h / 2, '#ff6b6b', 6);
           playSfx('release');
         }
@@ -755,10 +755,10 @@
           if (grapple.retractSpeed < 0.5) grapple.retractSpeed = 0;
           if (grapple.ropeLen < 50) grapple.ropeLen = 50;
         }
-        grapple.angularVel += (0.34 * Math.cos(grapple.angle)) / grapple.ropeLen;
-        grapple.angularVel *= 0.997;
-        if (Math.abs(grapple.angularVel) > 0.13) grapple.angularVel *= 0.98;
-        const swingInput = 0.007;
+        grapple.angularVel += (0.65 * Math.cos(grapple.angle)) / grapple.ropeLen;
+        grapple.angularVel *= 0.999;
+        if (Math.abs(grapple.angularVel) > 0.18) grapple.angularVel *= 0.995;
+        const swingInput = 0.012;
         if (keys['ArrowLeft'] || keys['KeyA']) { grapple.angularVel += swingInput; player.facing = -1; }
         if (keys['ArrowRight'] || keys['KeyD']) { grapple.angularVel -= swingInput; player.facing = 1; }
         if (keys['ArrowUp'] || keys['KeyW']) grapple.ropeLen = Math.max(35, grapple.ropeLen - 3);
