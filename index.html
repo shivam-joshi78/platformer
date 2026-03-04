@@ -804,9 +804,9 @@
           // Post-grapple: preserve swing momentum, smooth parabolic arc
           grapple.momentum--;
           player.vx *= 0.995; // very gentle air drag
-          // Allow slight air steering without killing momentum
-          if (keys['ArrowLeft'] || keys['KeyA']) { player.vx -= 0.3; player.facing = -1; }
-          if (keys['ArrowRight'] || keys['KeyD']) { player.vx += 0.3; player.facing = 1; }
+          // Air steering only against momentum (no boosting in direction of travel)
+          if ((keys['ArrowLeft'] || keys['KeyA']) && player.vx > 0) { player.vx -= 0.3; player.facing = -1; }
+          if ((keys['ArrowRight'] || keys['KeyD']) && player.vx < 0) { player.vx += 0.3; player.facing = 1; }
           player.vy += player.gravity * 0.7; // softer gravity for smoother arc
           if (player.grounded) grapple.momentum = 0; // land = done
         } else {
