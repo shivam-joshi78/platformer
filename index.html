@@ -39,6 +39,15 @@
     let cameraX = 0;
     const WORLD_WIDTH = 2400;
 
+    // Speedrun timer
+    let timerStart = 0;
+    let timerElapsed = 0;
+    let timerRunning = false;
+    let bestTime = parseFloat(localStorage.getItem('platformer_best')) || null;
+    let splits = []; // checkpoint split times
+    const splitZones = [600, 1200, 1800]; // x positions for splits
+    const splitHit = new Set();
+
     // Player
     const player = {
       x: 50, y: 300, w: 28, h: 36,
@@ -121,6 +130,13 @@
       }
     }
 
+    function formatTime(ms) {
+      const mins = Math.floor(ms / 60000);
+      const secs = Math.floor((ms % 60000) / 1000);
+      const centis = Math.floor((ms % 1000) / 10);
+      return `${mins}:${secs.toString().padStart(2, '0')}.${centis.toString().padStart(2, '0')}`;
+    }
+
     function restart() {
       player.x = 50; player.y = 300; player.vx = 0; player.vy = 0;
       player.coins = 0; player.grounded = false;
@@ -128,6 +144,11 @@
       enemies.forEach(e => { e.x = e.startX; e.dir = 1; });
       gameState = 'playing';
       particles.length = 0;
+      timerStart = performance.now();
+      timerElapsed = 0;
+      timerRunning = true;
+      splits = [];
+      splitHit.clear();
     }
 
     function rectCollision(a, b) {
@@ -234,9 +255,26 @@
         }
       }
 
+      // Speedrun splits
+      if (timerRunning) {
+        timerElapsed = performance.now() - timerStart;
+        for (let i = 0; i < splitZones.length; i++) {
+          if (!splitHit.has(i) && player.x >= splitZones[i]) {
+            splitHit.add(i);
+            splits.push(timerElapsed);
+          }
+        }
+      }
+
       // Flag
       if (rectCollision(player, flag)) {
         gameState = 'won';
+        timerRunning = false;
+        timerElapsed = performance.now() - timerStart;
+        if (!bestTime || timerElapsed < bestTime) {
+          bestTime = timerElapsed;
+          localStorage.setItem('platformer_best', bestTime.toString());
+        }
         spawnParticles(flag.x + flag.w / 2, flag.y, '#00ff88', 30);
       }
 
@@ -398,6 +436,27 @@
       ctx.font = 'bold 20px monospace';
       ctx.fillText(`Coins: ${player.coins}/${totalCoins}`, 20, 35);
 
+      // Speedrun timer HUD
+      if (timerRunning) {
+        timerElapsed = performance.now() - timerStart;
+      }
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 22px monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText(formatTime(timerElapsed), canvas.width - 20, 30);
+      if (bestTime) {
+        ctx.fillStyle = '#00ff88';
+        ctx.font = '14px monospace';
+        ctx.fillText(`Best: ${formatTime(bestTime)}`, canvas.width - 20, 50);
+      }
+      // Splits display
+      ctx.font = '13px monospace';
+      for (let i = 0; i < splits.length; i++) {
+        ctx.fillStyle = '#aaa';
+        ctx.fillText(`Split ${i + 1}: ${formatTime(splits[i])}`, canvas.width - 20, 70 + i * 18);
+      }
+      ctx.textAlign = 'left';
+
       // Game over / win screens
       if (gameState === 'won') {
         ctx.fillStyle = 'rgba(0,0,0,0.6)';
@@ -405,13 +464,26 @@
         ctx.fillStyle = '#00ff88';
         ctx.font = 'bold 48px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText('YOU WIN!', canvas.width / 2, canvas.height / 2 - 30);
+        ctx.fillText('YOU WIN!', canvas.width / 2, canvas.height / 2 - 50);
+        // Final time
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 28px monospace';
+        ctx.fillText(`Time: ${formatTime(timerElapsed)}`, canvas.width / 2, canvas.height / 2 - 10);
+        if (bestTime === timerElapsed) {
+          ctx.fillStyle = '#ffd700';
+          ctx.font = 'bold 18px monospace';
+          ctx.fillText('NEW BEST!', canvas.width / 2, canvas.height / 2 + 18);
+        } else if (bestTime) {
+          ctx.fillStyle = '#aaa';
+          ctx.font = '16px monospace';
+          ctx.fillText(`Best: ${formatTime(bestTime)}`, canvas.width / 2, canvas.height / 2 + 18);
+        }
         ctx.fillStyle = '#ffd700';
-        ctx.font = '24px monospace';
-        ctx.fillText(`Coins: ${player.coins}/${totalCoins}`, canvas.width / 2, canvas.height / 2 + 15);
+        ctx.font = '20px monospace';
+        ctx.fillText(`Coins: ${player.coins}/${totalCoins}`, canvas.width / 2, canvas.height / 2 + 48);
         ctx.fillStyle = '#fff';
         ctx.font = '18px monospace';
-        ctx.fillText('Press R to restart', canvas.width / 2, canvas.height / 2 + 55);
+        ctx.fillText('Press R to restart', canvas.width / 2, canvas.height / 2 + 80);
         ctx.textAlign = 'left';
       } else if (gameState === 'dead') {
         ctx.fillStyle = 'rgba(0,0,0,0.6)';
@@ -437,6 +509,10 @@
       draw();
       requestAnimationFrame(gameLoop);
     }
+
+    // Start timer on first load
+    timerStart = performance.now();
+    timerRunning = true;
 
     gameLoop();
   </script>
