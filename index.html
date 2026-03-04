@@ -184,6 +184,14 @@
       <!-- Patch Notes tab -->
       <div class="tab-content" id="tab-patchnotes">
         <div class="patch-section">
+          <div class="patch-version">v1.7 — Smooth Release</div>
+          <div class="patch-date">March 2026</div>
+          <div class="patch-item fix">Post-grapple momentum: smooth parabolic arc on release</div>
+          <div class="patch-item fix">Removed vertical jerk on release (no more vy amplification)</div>
+          <div class="patch-item fix">Softer gravity during post-grapple flight (0.7x)</div>
+          <div class="patch-item fix">Gentle air steering without killing momentum</div>
+          <div class="patch-item fix">Compensated pendulum gravity for longer ropes</div>
+          <div class="patch-item fix">Reduced swing damping, raised speed cap</div>
           <div class="patch-version">v1.6 — Level Rework</div>
           <div class="patch-date">March 2026</div>
           <div class="patch-item fix">Raised all grapple anchors much higher for bigger swings</div>
@@ -531,7 +539,7 @@
     const grapple = {
       active: false, hookedPoint: null, ropeLen: 0, angle: 0, angularVel: 0,
       firing: false, fireX: 0, fireY: 0, fireDx: 0, fireDy: 0, fireTimer: 0,
-      retractSpeed: 0
+      retractSpeed: 0, momentum: 0
     };
     const GRAPPLE_RANGE = 450;
     const GRAPPLE_FIRE_SPEED = 20;
@@ -650,7 +658,7 @@
       });
       gameState = 'playing';
       particles.length = 0;
-      grapple.active = false; grapple.firing = false; grapple.hookedPoint = null;
+      grapple.active = false; grapple.firing = false; grapple.hookedPoint = null; grapple.momentum = 0;
       timerStart = performance.now(); timerElapsed = 0; timerRunning = true;
       splits = []; splitHit.clear();
     }
@@ -721,11 +729,12 @@
 
       if (!grappleHeld && (grapple.active || grapple.firing)) {
         if (grapple.active) {
-          // Strong release boost — preserves swing direction
+          // Launch with swing momentum — smooth arc, no vertical jerk
           player.vx *= 1.5;
-          player.vy *= 1.3;
-          // Cap extreme upward launches but keep horizontal
+          // Don't amplify upward vy — just keep it natural for a smooth arc
           if (player.vy < -16) player.vy = -16;
+          // Set momentum timer so air physics preserves this velocity
+          grapple.momentum = 90;
           spawnParticles(player.x + player.w / 2, player.y + player.h / 2, '#ff6b6b', 6);
           playSfx('release');
         }
@@ -783,14 +792,26 @@
           }
         }
       } else if (!grapple.active) {
-        player.vx = 0;
-        if (keys['ArrowLeft'] || keys['KeyA']) { player.vx = -player.speed; player.facing = -1; }
-        if (keys['ArrowRight'] || keys['KeyD']) { player.vx = player.speed; player.facing = 1; }
+        if (grapple.momentum > 0) {
+          // Post-grapple: preserve swing momentum, smooth parabolic arc
+          grapple.momentum--;
+          player.vx *= 0.995; // very gentle air drag
+          // Allow slight air steering without killing momentum
+          if (keys['ArrowLeft'] || keys['KeyA']) { player.vx -= 0.3; player.facing = -1; }
+          if (keys['ArrowRight'] || keys['KeyD']) { player.vx += 0.3; player.facing = 1; }
+          player.vy += player.gravity * 0.7; // softer gravity for smoother arc
+          if (player.grounded) grapple.momentum = 0; // land = done
+        } else {
+          player.vx = 0;
+          if (keys['ArrowLeft'] || keys['KeyA']) { player.vx = -player.speed; player.facing = -1; }
+          if (keys['ArrowRight'] || keys['KeyD']) { player.vx = player.speed; player.facing = 1; }
+          player.vy += player.gravity;
+        }
         if ((keys['ArrowUp'] || keys['KeyW'] || keys['Space']) && player.grounded) {
           player.vy = player.jumpForce; player.grounded = false;
+          grapple.momentum = 0;
           playSfx('jump');
         }
-        player.vy += player.gravity;
         if (player.vy > 12) player.vy = 12;
         player.x += player.vx;
         for (const plat of allPlats) {
