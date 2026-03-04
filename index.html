@@ -399,20 +399,21 @@
           if (grapple.ropeLen < 50) grapple.ropeLen = 50;
         }
 
-        // Pendulum gravity — gentler to keep arcs more horizontal
-        const pendulumGravity = 0.28;
+        // Pendulum gravity — balanced for smooth arcs
+        const pendulumGravity = 0.34;
         grapple.angularVel += (pendulumGravity * Math.cos(grapple.angle)) / grapple.ropeLen;
 
-        // Moderate damping — momentum carries but doesn't spiral
-        grapple.angularVel *= 0.993;
+        // Light damping — smooth but not stiff
+        grapple.angularVel *= 0.996;
 
-        // Cap angular velocity to prevent going too fast / launching to sky
-        const maxAngVel = 0.06;
-        if (grapple.angularVel > maxAngVel) grapple.angularVel = maxAngVel;
-        if (grapple.angularVel < -maxAngVel) grapple.angularVel = -maxAngVel;
+        // Soft cap — slows down gradually instead of hard clamping
+        const maxAngVel = 0.09;
+        if (Math.abs(grapple.angularVel) > maxAngVel) {
+          grapple.angularVel *= 0.97;
+        }
 
-        // Player input — FLIPPED directions (left key = swing right, feels like pushing)
-        const swingInput = 0.006;
+        // Player input — flipped directions
+        const swingInput = 0.007;
         if (keys['ArrowLeft'] || keys['KeyA']) {
           grapple.angularVel += swingInput;
           player.facing = -1;
@@ -436,11 +437,11 @@
         player.x = grapple.hookedPoint.x + Math.cos(grapple.angle) * grapple.ropeLen - player.w / 2;
         player.y = grapple.hookedPoint.y + Math.sin(grapple.angle) * grapple.ropeLen - player.h / 2;
 
-        // Convert to linear velocity — favor horizontal over vertical
+        // Convert to linear velocity
         player.vx = -Math.sin(grapple.angle) * grapple.angularVel * grapple.ropeLen;
         player.vy = Math.cos(grapple.angle) * grapple.angularVel * grapple.ropeLen;
-        // Dampen upward velocity to keep launches more horizontal
-        if (player.vy < -5) player.vy *= 0.85;
+        // Gently tame extreme upward launches
+        if (player.vy < -8) player.vy *= 0.92;
 
         // Swing trail particles
         if (Math.abs(grapple.angularVel) > 0.02) {
