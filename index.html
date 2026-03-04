@@ -60,18 +60,18 @@
     // Grapple state
     const grapple = {
       active: false,
-      hookedPoint: null,    // {x, y} anchor point
+      hookedPoint: null,
       ropeLen: 0,
       angle: 0,
       angularVel: 0,
       firing: false,
-      fireX: 0, fireY: 0,  // projectile position while firing
+      fireX: 0, fireY: 0,
       fireDx: 0, fireDy: 0,
-      fireTimer: 0
+      fireTimer: 0,
+      retractSpeed: 0       // auto-retract on hook
     };
-    const GRAPPLE_RANGE = 250;
-    const GRAPPLE_FIRE_SPEED = 14;
-    const GRAPPLE_PULL = 0.35;
+    const GRAPPLE_RANGE = 280;
+    const GRAPPLE_FIRE_SPEED = 20;
 
     // Grapple anchor points (rings in the sky) [x, y]
     const anchors = [
@@ -283,10 +283,6 @@
       const py = player.y + player.h / 2;
       let best = null, bestDist = GRAPPLE_RANGE;
       for (const a of anchors) {
-        // only grapple to anchors above or at player level and in facing direction
-        const dx = a[0] - px;
-        if (player.facing > 0 && dx < -50) continue;
-        if (player.facing < 0 && dx > 50) continue;
         const d = dist(px, py, a[0], a[1]);
         if (d < bestDist) {
           bestDist = d;
@@ -361,7 +357,7 @@
         grapple.fireY += grapple.fireDy;
         grapple.fireTimer++;
         const d = dist(grapple.fireX, grapple.fireY, grapple.hookedPoint.x, grapple.hookedPoint.y);
-        if (d < 15) {
+        if (d < 20) {
           // Hook connected
           grapple.firing = false;
           grapple.active = true;
@@ -369,10 +365,17 @@
           const py = player.y + player.h / 2;
           grapple.ropeLen = dist(px, py, grapple.hookedPoint.x, grapple.hookedPoint.y);
           grapple.angle = Math.atan2(py - grapple.hookedPoint.y, px - grapple.hookedPoint.x);
-          // Convert current velocity to angular velocity
+          // Convert current velocity to angular velocity (preserve momentum)
           const tangentX = -Math.sin(grapple.angle);
           const tangentY = Math.cos(grapple.angle);
           grapple.angularVel = (player.vx * tangentX + player.vy * tangentY) / grapple.ropeLen;
+          // Add a minimum swing if player had downward velocity (feels like catching)
+          if (Math.abs(grapple.angularVel) < 0.015 && player.vy > 2) {
+            grapple.angularVel = player.facing * 0.02;
+          }
+          // Auto-retract: pull player toward anchor smoothly
+          grapple.retractSpeed = grapple.ropeLen > 120 ? 4 : 0;
+          spawnParticles(grapple.hookedPoint.x, grapple.hookedPoint.y, '#ff6b6b', 5);
         }
         if (grapple.fireTimer > 30) {
           grapple.firing = false;
@@ -382,27 +385,38 @@
 
       // Grapple swing physics
       if (grapple.active && grapple.hookedPoint) {
-        // Pendulum physics
-        const gravityForce = player.gravity * Math.sin(grapple.angle);
-        grapple.angularVel += gravityForce / grapple.ropeLen;
-        grapple.angularVel *= 0.995; // slight damping
+        // Auto-retract rope on initial hook (pulls you in smoothly)
+        if (grapple.retractSpeed > 0) {
+          grapple.ropeLen -= grapple.retractSpeed;
+          grapple.retractSpeed *= 0.92; // ease out
+          if (grapple.retractSpeed < 0.5) grapple.retractSpeed = 0;
+          if (grapple.ropeLen < 50) grapple.ropeLen = 50;
+        }
 
-        // Player input affects swing
+        // Pendulum gravity — scale with rope length for consistent feel
+        const pendulumGravity = 0.4;
+        grapple.angularVel += (pendulumGravity * Math.cos(grapple.angle)) / grapple.ropeLen;
+
+        // Very low damping — let momentum carry
+        grapple.angularVel *= 0.998;
+
+        // Strong player input — pump the swing
+        const swingInput = 0.008;
         if (keys['ArrowLeft'] || keys['KeyA']) {
-          grapple.angularVel -= 0.003;
+          grapple.angularVel -= swingInput;
           player.facing = -1;
         }
         if (keys['ArrowRight'] || keys['KeyD']) {
-          grapple.angularVel += 0.003;
+          grapple.angularVel += swingInput;
           player.facing = 1;
         }
 
-        // Shorten rope (climb up)
+        // Climb rope (fast and responsive)
         if (keys['ArrowUp'] || keys['KeyW']) {
-          grapple.ropeLen = Math.max(40, grapple.ropeLen - 2);
+          grapple.ropeLen = Math.max(35, grapple.ropeLen - 3.5);
         }
         if (keys['ArrowDown'] || keys['KeyS']) {
-          grapple.ropeLen = Math.min(GRAPPLE_RANGE, grapple.ropeLen + 2);
+          grapple.ropeLen = Math.min(GRAPPLE_RANGE, grapple.ropeLen + 3);
         }
 
         grapple.angle += grapple.angularVel;
@@ -411,27 +425,54 @@
         player.x = grapple.hookedPoint.x + Math.cos(grapple.angle) * grapple.ropeLen - player.w / 2;
         player.y = grapple.hookedPoint.y + Math.sin(grapple.angle) * grapple.ropeLen - player.h / 2;
 
-        // Convert angular velocity to linear for when releasing
+        // Convert angular velocity to linear velocity (full momentum preserved)
         player.vx = -Math.sin(grapple.angle) * grapple.angularVel * grapple.ropeLen;
         player.vy = Math.cos(grapple.angle) * grapple.angularVel * grapple.ropeLen;
 
-        // Jump/release grapple
-        if (keysPressed['Space']) {
-          grapple.active = false;
-          grapple.hookedPoint = null;
-          player.vy = Math.min(player.vy, player.jumpForce * 0.8);
+        // Swing trail particles
+        if (Math.abs(grapple.angularVel) > 0.02) {
+          spawnParticles(player.x + player.w / 2, player.y + player.h, 'rgba(255,107,107,0.5)', 1);
         }
 
-        // Check platform collision while swinging
+        // Release with E/Shift — preserves full momentum
+        if (keysPressed['KeyE'] || keysPressed['ShiftLeft'] || keysPressed['ShiftRight']) {
+          const releaseBoost = 1.15; // slight launch boost
+          player.vx *= releaseBoost;
+          player.vy *= releaseBoost;
+          grapple.active = false;
+          grapple.hookedPoint = null;
+          spawnParticles(player.x + player.w / 2, player.y + player.h / 2, '#ff6b6b', 6);
+        }
+
+        // Jump release — full momentum + upward kick
+        if (keysPressed['Space']) {
+          const speed = Math.sqrt(player.vx ** 2 + player.vy ** 2);
+          const launchBoost = 1.25;
+          player.vx *= launchBoost;
+          player.vy *= launchBoost;
+          // Add upward kick (stronger when moving fast)
+          player.vy = Math.min(player.vy, -Math.max(6, speed * 0.5));
+          grapple.active = false;
+          grapple.hookedPoint = null;
+          spawnParticles(player.x + player.w / 2, player.y + player.h / 2, '#ff6b6b', 8);
+        }
+
+        // Platform collision while swinging
         player.grounded = false;
         for (const plat of allPlats) {
           if (rectCollision(player, plat)) {
-            grapple.active = false;
-            grapple.hookedPoint = null;
-            if (player.vy > 0) {
+            // Only detach if landing on top
+            if (player.vy > 0 && player.y + player.h - plat.y < 15) {
               player.y = plat.y - player.h;
               player.vy = 0;
               player.grounded = true;
+              grapple.active = false;
+              grapple.hookedPoint = null;
+            } else if (player.vy < 0 && player.y < plat.y + plat.h) {
+              // Bonk head — don't detach, just stop upward
+              player.y = plat.y + plat.h;
+              player.vy = 0;
+              grapple.angularVel *= 0.5;
             }
             break;
           }
@@ -652,12 +693,27 @@
 
       // Grapple rope
       if (grapple.active && grapple.hookedPoint) {
-        ctx.strokeStyle = '#ff6b6b';
-        ctx.lineWidth = 2;
+        const rpx = player.x + player.w / 2;
+        const rpy = player.y + player.h / 2;
+        const tension = Math.min(1, Math.abs(grapple.angularVel) * 15);
+        // Rope sag (less sag = more tension = more speed)
+        const midX = (rpx + grapple.hookedPoint.x) / 2;
+        const midY = (rpy + grapple.hookedPoint.y) / 2 + (1 - tension) * 20;
+        ctx.strokeStyle = `rgba(255,${100 + tension * 155},${100 + tension * 100},${0.7 + tension * 0.3})`;
+        ctx.lineWidth = 2 + tension;
         ctx.beginPath();
-        ctx.moveTo(player.x + player.w / 2, player.y + player.h / 2);
-        ctx.lineTo(grapple.hookedPoint.x, grapple.hookedPoint.y);
+        ctx.moveTo(rpx, rpy);
+        ctx.quadraticCurveTo(midX, midY, grapple.hookedPoint.x, grapple.hookedPoint.y);
         ctx.stroke();
+        // Glow at high speed
+        if (tension > 0.5) {
+          ctx.strokeStyle = `rgba(255,200,150,${(tension - 0.5) * 0.4})`;
+          ctx.lineWidth = 5;
+          ctx.beginPath();
+          ctx.moveTo(rpx, rpy);
+          ctx.quadraticCurveTo(midX, midY, grapple.hookedPoint.x, grapple.hookedPoint.y);
+          ctx.stroke();
+        }
       }
       // Grapple firing line
       if (grapple.firing && grapple.hookedPoint) {
